@@ -5,7 +5,7 @@
   version: 0.1.1-b966127
   date: 2026-07-04 04:10:40
   path: InternetArchiveToggle.zip
-  sha256: c475f6e10014ec1d768f1637831f5eb78cdfd7fbb98df9e4d985fcfd885bf12f
+  sha256: 66a386317f3f74117eeb601617fcabc5a591233b8780fd1fe94064ff3d180722
 
 - id: AliasPromoter
   name: Alias Promoter
@@ -14,14 +14,14 @@
   version: 0.2.1-4f5b6e9
   date: 2026-07-04 03:55:15
   path: AliasPromoter.zip
-  sha256: d4a3940592dba2ddd7965fc67dffa9d5701c5471e8894782ab535613c520eda8
+  sha256: f5344085e58c79ff1d696dbb9b55f4d83f39299d47743cc4697365077b99690c
 
 - id: CustomRulesEngine
   name: Custom Rules Engine
   metadata:
     description: Define rules that automatically update item metadata 
-  version: 0.3.0-8d2790e
-  date: 2026-07-04 03:25:27
+  version: 0.4.0-83e384f
+  date: 2026-07-04 18:23:01
   path: CustomRulesEngine.zip
-  sha256: 4861a511d8794b7a92ff96bfd5c78a176d586f06657780a2efdd7620de24015f
+  sha256: 2d72478e0f647adcc902c9c4f1bfb7a2e3497dd28274c23fb9cdae2294db2872
 
