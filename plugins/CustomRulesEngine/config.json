@@ -1,0 +1,238 @@
+{
+  "rules": [
+    { "name": "FC2 Path => Studio Code",
+      "events": [
+        "Scene.Create.Post",
+        "Scene.Update.Post"
+      ],
+      "conditions": [
+        {
+          "type": "regex",
+          "field": "file.path",
+          "pattern": "[Ff][Cc]2.*?(\\d{7})"
+        }
+      ],
+      "actions": [
+        {
+          "type": "set",
+          "field": "code",
+          "template": "FC2-PPV-{1}",
+          "mode": "always"
+        }
+      ]
+    },
+    { "name": "FC2 Studio Code => URLs",
+      "events": [
+        "Scene.Create.Post",
+        "Scene.Update.Post"
+      ],
+      "conditions": [
+        {
+          "type": "regex",
+          "field": "code",
+          "pattern": "FC2-PPV-(\\d{7})"
+        }
+      ],
+      "actions": [
+        {
+          "type": "add",
+          "field": "urls",
+          "template": "https://adult.contents.fc2.com/article/{1}/",
+          "mode": "if_missing"
+        },
+        {
+          "type": "add",
+          "field": "urls",
+          "template": "https://fc2cmadb.com/articles/{1}",
+          "mode": "if_missing"
+        }
+      ]
+    },
+    { "name": "Eporner Path => URL",
+      "events": [
+        "Scene.Create.Post",
+        "Scene.Update.Post"
+      ],
+      "conditions": [
+        {
+          "type": "regex",
+          "field": "file.path",
+          "pattern": "EPORNER\\.COM\\ -\\ \\[(.*?)\\]"
+        }
+      ],
+      "actions": [
+        {
+          "type": "add",
+          "field": "urls",
+          "template": "https://www.eporner.com/video-{1}",
+          "mode": "if_missing"
+        }
+      ]
+    },
+    { "name": "Caribbeancom/Caribbeancompr URL => JP/EN URL + Studio Code",
+      "events": [
+        "Scene.Create.Post",
+        "Scene.Update.Post"
+      ],
+      "conditions": [
+        {
+          "type": "regex",
+          "field": "urls",
+          "pattern": "//.*((caribbeancom)(pr)?\\.com).*?moviepages/(\\d{6}[_-]\\d{3})"
+        }
+      ],
+      "actions": [
+        {
+          "type": "add",
+          "field": "urls",
+          "template": "https://www.{1}/moviepages/{4}/index.html",
+          "mode": "if_missing"
+        },
+        {
+          "type": "add",
+          "field": "urls",
+          "template": "https://en.{1}/eng/moviepages/{4}/index.html",
+          "mode": "if_missing"
+        },
+        {
+          "type": "set",
+          "field": "code",
+          "template": "{4}-carib{3}",
+          "mode": "always"
+        }
+      ]
+    },
+    { "name": "Heyzo URL => JP/EN URL + Studio Code",
+      "events": [
+        "Scene.Create.Post",
+        "Scene.Update.Post"
+      ],
+      "conditions": [
+        {
+          "type": "regex",
+          "field": "urls",
+          "pattern": "//.*(heyzo\\.com).*?/moviepages/(\\d{3,5})/"
+        }
+      ],
+      "actions": [
+        {
+          "type": "add",
+          "field": "urls",
+          "template": "https://www.{1}/moviepages/{2}/index.html",
+          "mode": "if_missing"
+        },
+        {
+          "type": "add",
+          "field": "urls",
+          "template": "https://en.{1}/moviepages/{2}/index.html",
+          "mode": "if_missing"
+        },
+        {
+          "type": "set",
+          "field": "code",
+          "template": "HEYZO-{2}",
+          "mode": "always"
+        }
+      ]
+    },
+    { "name": "Tokyo-Hot URL => JP/EN URL + Studio Code",
+      "events": [
+        "Scene.Create.Post",
+        "Scene.Update.Post"
+      ],
+      "conditions": [
+        {
+          "type": "regex",
+          "field": "urls",
+          "pattern": "//.*(tokyo-hot\\.com).*?/product/(n\\d+)"
+        }
+      ],
+      "actions": [
+        {
+          "type": "add",
+          "field": "urls",
+          "template": "https://my.{1}/product/{2}/?lang=ja",
+          "mode": "if_missing"
+        },
+        {
+          "type": "add",
+          "field": "urls",
+          "template": "https://my.{1}/product/{2}/?lang=en",
+          "mode": "if_missing"
+        },
+        {
+          "type": "set",
+          "field": "code",
+          "template": "{2}",
+          "mode": "always"
+        }
+      ]
+    },
+    { "name": "GirlsDelta URL => JP/EN URL + Studio Code",
+      "events": [
+        "Scene.Create.Post",
+        "Scene.Update.Post"
+      ],
+      "conditions": [
+        {
+          "type": "regex",
+          "field": "urls",
+          "pattern": "//.*(girlsdelta\\.com)/(jp|en)/product/(\\d+)"
+        }
+      ],
+      "actions": [
+        {
+          "type": "add",
+          "field": "urls",
+          "template": "https://{1}/jp/product/{3}",
+          "mode": "if_missing"
+        },
+        {
+          "type": "add",
+          "field": "urls",
+          "template": "https://{1}/en/product/{3}",
+          "mode": "if_missing"
+        },
+        {
+          "type": "set",
+          "field": "code",
+          "template": "{3}",
+          "mode": "always"
+        }
+      ]
+    },
+    { "name": "1pondo/10musume/muramura/pacopacomama URL => JP/EN URL + Studio Code",
+      "events": [
+        "Scene.Create.Post",
+        "Scene.Update.Post"
+      ],
+      "conditions": [
+        {
+          "type": "regex",
+          "field": "urls",
+          "pattern": "//.*((10mu|1pon|mura|paco)(sume\\.com|do\\.tv|mura\\.tv|pacomama\\.com)).*?(\\d{6}[_-]\\d{2,3})"
+        }
+      ],
+      "actions": [
+        {
+          "type": "add",
+          "field": "urls",
+          "template": "https://www.{1}/movies/{4}/",
+          "mode": "if_missing"
+        },
+        {
+          "type": "add",
+          "field": "urls",
+          "template": "https://en.{1}/movies/{4}/",
+          "mode": "if_missing"
+        },
+        {
+          "type": "set",
+          "field": "code",
+          "template": "{4}-{2}",
+          "mode": "always"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+name: Custom Rules Engine
+description: Define rules that automatically update item metadata 
+version: 0.3.0
+
+exec:
+  - python3
+  - "{pluginDir}/CustomRulesEngine.py"
+
+hooks:
+  - name: Apply custom rules on scene create/update
+    description: Runs the rule engine when a scene is created or updated
+    triggeredBy:
+      - Scene.Create.Post
+      - Scene.Update.Post
+
+settings:
+  rules_file:
+    displayName: Rules file (JSON, supports {pluginDir})
+    type: STRING
