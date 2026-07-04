@@ -1,0 +1,6 @@
+name: Internet Archive Toggle
+version: 0.1.1
+ui:
+  javascript:
+    - InternetArchiveToggle.js
+
