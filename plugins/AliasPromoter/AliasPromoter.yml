@@ -1,0 +1,6 @@
+name: Alias Promoter
+description: Adds a button to promote an alias to the main name by swapping input field values.
+version: 0.2.1
+ui:
+  javascript:
+    - AliasPromoter.js
