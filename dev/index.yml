@@ -5,16 +5,16 @@
   version: 0.1.1-e33e184
   date: 2026-07-04 03:25:57
   path: InternetArchiveToggle.zip
-  sha256: 41334e1cf2197f0234f02204827cd48c98374b879b0637f3bfba10660adc7045
+  sha256: 99d61fe1060a8a9a552ea5d3e1b9ad59c5832eec6b5b21ff870202f95473a37c
 
 - id: AliasPromoter
   name: Alias Promoter
   metadata:
     description: Adds a button to promote an alias to the main name by swapping input field values.
-  version: 0.2.1-a371fbb
-  date: 2026-07-04 03:19:51
+  version: 0.2.1-4f5b6e9
+  date: 2026-07-04 03:55:15
   path: AliasPromoter.zip
-  sha256: 4ae7b4d00b3de9463c08b4c975f7028bbf82094e460eec02f66674f16a010544
+  sha256: 1e3ff53bb2f00d5f8ca57291e98710c43817033c931de9f12da0d577919d2754
 
 - id: CustomRulesEngine
   name: Custom Rules Engine
@@ -23,5 +23,5 @@
   version: 0.3.0-8d2790e
   date: 2026-07-04 03:25:27
   path: CustomRulesEngine.zip
-  sha256: 663a73fc84dee1b2500bbe44a19eeee0b6c5abe74ca58af0d0baab2484f169c3
+  sha256: 8f3d1e017c7dd8dd9719c4de0f5d73dce7ed866ac2183a43fda7caff067e40ed
 
