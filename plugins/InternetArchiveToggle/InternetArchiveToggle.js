@@ -90,13 +90,7 @@ function iat_injectButtonsInto(container) {
       iat_toggleArchiveURL(input);
     });
 
-    const scrapeBtn = append.querySelector(".scrape-url-button");
-
-    if (scrapeBtn) {
-      scrapeBtn.parentNode.insertBefore(btn, scrapeBtn.nextSibling);
-    } else {
-      append.appendChild(btn);
-    }
+    append.appendChild(btn);
   });
 }
 
