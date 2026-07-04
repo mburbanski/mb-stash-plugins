@@ -1,0 +1,9 @@
+- id: AliasPromoter
+  name: Alias Promoter
+  metadata:
+    description: Adds a button to promote an alias to the main name by swapping input field values.
+  version: 0.2.1-a371fbb
+  date: 2026-07-04 03:19:51
+  path: AliasPromoter.zip
+  sha256: 53ee32b85c35fae91515db16d85221e219858279ddfa759853488ab01ed6ee3c
+
