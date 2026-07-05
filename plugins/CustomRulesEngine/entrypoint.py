@@ -19,9 +19,33 @@ import stashapi.log as log
 
 from engine import run_rules, RuleError, PlannedChange
 from hooks import EntityHooks
-from schema import validate_rules_data, RulesFileError, RuleValidationError, Rule
+from schema import validate_rules_data, RulesFileError, RuleValidationError, Rule, SCHEMA_VERSION
 
 PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# The document written out when no rules file exists yet. Deliberately inert
+# (zero rules) -- this plugin should never ship or generate a file that acts
+# on a user's library without them having written a rule themselves.
+EMPTY_RULES_DOCUMENT = {"schema_version": SCHEMA_VERSION, "rules": []}
+
+
+def _create_empty_rules_file(path: str) -> None:
+    """
+    Write EMPTY_RULES_DOCUMENT to `path`.
+
+    Only ever called from the FileNotFoundError branch of load_rules(), i.e.
+    only when nothing exists at `path` yet. This function must never be
+    called to "repair" a file that exists but fails to parse/validate --
+    a broken file might just be mid-edit, and overwriting it would destroy
+    whatever the user was working on.
+    """
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(EMPTY_RULES_DOCUMENT, f, indent=2)
+        log.info(f"[CustomRules] No rules file found; created an empty one at {path}")
+    except OSError as e:
+        log.error(f"[CustomRules] Could not create rules file at {path}: {e}")
 
 
 # ------------------------------------------------------------
@@ -31,10 +55,15 @@ def load_rules(path: str) -> "list[Rule]":
     """
     Read, parse, and schema-validate the rules file at `path`.
 
-    Three distinct failure levels are reported at three distinct log
-    severities, so a plugin author (or, eventually, a config UI) can tell
-    them apart:
-      - Can't read/parse the file at all -> error, nothing loads.
+    No file at `path` is treated as first-run, not an error: an empty,
+    inert rules document is created there (see _create_empty_rules_file),
+    and this returns an empty rule list. A file that exists but is broken
+    is never touched or replaced -- only a missing file gets originated.
+
+    Beyond that, failures are reported at distinct log severities so a
+    plugin author (or, eventually, a config UI) can tell them apart:
+      - File exists but can't be parsed (bad JSON, unreadable) -> error,
+        nothing loads.
       - File parses but fails schema-level checks (bad schema_version,
         wrong top-level shape) -> error, nothing loads.
       - Individual rule fails validation -> error for that rule only; the
@@ -47,7 +76,7 @@ def load_rules(path: str) -> "list[Rule]":
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
-        log.error(f"[CustomRules] Rules file not found: {path}")
+        _create_empty_rules_file(path)
         return []
     except json.JSONDecodeError as e:
         log.error(f"[CustomRules] Rules file is not valid JSON ({path}): {e}")
