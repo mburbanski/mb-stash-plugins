@@ -107,6 +107,20 @@ def resolve_rules_file(settings: dict) -> str:
     return rules_file.replace("{pluginDir}", PLUGIN_DIR)
 
 
+def read_rules_file_raw(path: str) -> str:
+    """
+    Return the raw text contents of the rules file at `path`, for a UI to
+    display/edit -- including if that text is currently broken JSON that
+    load_rules() would otherwise just log and skip. Creates an empty inert
+    file first if nothing exists yet, same origination behavior as
+    load_rules(), just returning text instead of validated Rule objects.
+    """
+    if not os.path.exists(path):
+        _create_empty_rules_file(path)
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
 # ------------------------------------------------------------
 # Applying planned changes
 # ------------------------------------------------------------

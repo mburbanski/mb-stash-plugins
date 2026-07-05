@@ -74,6 +74,29 @@
     }
   `;
 
+  const RUN_PLUGIN_OPERATION_MUTATION = `
+    mutation RunPluginOperation($plugin_id: ID!, $args: Map!) {
+      runPluginOperation(plugin_id: $plugin_id, args: $args)
+    }
+  `;
+
+  // Invokes the Python side outside the normal hook path -- CustomRulesEngine.py
+  // recognizes the "customRulesOperation" key in args and dispatches on it
+  // (see handle_operation() in CustomRulesEngine.py), printing a
+  // {"error": ..., "output": ...} line to stdout that becomes this
+  // mutation's return value.
+  async function runPluginOperation(operationArgs) {
+    const data = await graphqlRequest(RUN_PLUGIN_OPERATION_MUTATION, {
+      plugin_id: PLUGIN_ID,
+      args: operationArgs,
+    });
+    return data.runPluginOperation;
+  }
+
+  async function fetchRawRulesFile() {
+    return runPluginOperation({ customRulesOperation: "read_rules_file" });
+  }
+
   async function fetchPluginSettings() {
     const data = await graphqlRequest(CONFIGURATION_QUERY);
     return (data.configuration.plugins && data.configuration.plugins[PLUGIN_ID]) || {};
@@ -115,6 +138,11 @@
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState(null);
 
+    const [rawContents, setRawContents] = useState("");
+    const [rawPath, setRawPath] = useState("");
+    const [rawLoaded, setRawLoaded] = useState(false);
+    const [rawError, setRawError] = useState(null);
+
     useEffect(() => {
       fetchPluginSettings()
         .then((settings) => {
@@ -122,6 +150,16 @@
           setLoaded(true);
         })
         .catch((err) => setError(String(err)));
+    }, []);
+
+    useEffect(() => {
+      fetchRawRulesFile()
+        .then((result) => {
+          setRawPath(result.path);
+          setRawContents(result.contents);
+          setRawLoaded(true);
+        })
+        .catch((err) => setRawError(String(err)));
     }, []);
 
     function handleChange(event) {
@@ -164,7 +202,26 @@
         { onClick: handleSave, disabled: !loaded, style: { marginTop: "1rem" }, className: "btn btn-primary" },
         "Save"
       ),
-      saved ? el("span", { style: { marginLeft: "0.75rem", color: "green" } }, "Saved") : null
+      saved ? el("span", { style: { marginLeft: "0.75rem", color: "green" } }, "Saved") : null,
+
+      // --- Read-only preview of the actual rules file contents ---
+      // Step 1 of wiring the file itself into this page: prove the round
+      // trip through runPluginOperation works before adding editing/saving.
+      el("h3", { style: { marginTop: "2rem" } }, "Current rules file contents (read-only for now)"),
+      rawError ? el("p", { style: { color: "red" } }, "Error: " + rawError) : null,
+      rawLoaded
+        ? el(
+            "div",
+            null,
+            el("p", { style: { fontFamily: "monospace", fontSize: "0.85rem" } }, rawPath),
+            el("textarea", {
+              readOnly: true,
+              value: rawContents,
+              rows: 16,
+              style: { width: "100%", fontFamily: "monospace", padding: "0.5rem" },
+            })
+          )
+        : el("p", null, "Loading...")
     );
   }
 
