@@ -7,7 +7,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import stashapi.log as log
 from stashapi.stashapp import StashInterface
 
-from entrypoint import process_entity, should_process_update, PLUGIN_DIR, resolve_rules_file, read_rules_file_raw
+from entrypoint import (
+    process_entity,
+    should_process_update,
+    PLUGIN_DIR,
+    resolve_rules_file,
+    read_rules_file_raw,
+    write_rules_file_raw,
+)
 from hooks import resolve_hook_config
 
 
@@ -22,7 +29,7 @@ def emit_output(output) -> None:
     print(json.dumps({"error": None, "output": output}))
 
 
-def handle_operation(operation: str, settings: dict) -> bool:
+def handle_operation(operation: str, args: dict, settings: dict) -> bool:
     """
     Dispatch a non-hook, UI-triggered operation (invoked via
     runPluginOperation rather than a Stash event hook). Returns True if
@@ -32,6 +39,13 @@ def handle_operation(operation: str, settings: dict) -> bool:
         rules_file = resolve_rules_file(settings)
         contents = read_rules_file_raw(rules_file)
         emit_output({"path": rules_file, "contents": contents})
+        return True
+
+    if operation == "write_rules_file":
+        rules_file = resolve_rules_file(settings)
+        contents = args.get("contents", "")
+        success, errors = write_rules_file_raw(rules_file, contents)
+        emit_output({"success": success, "errors": errors})
         return True
 
     return False
@@ -51,7 +65,7 @@ def main():
 
     operation = args.get("customRulesOperation")
     if operation:
-        if not handle_operation(operation, settings):
+        if not handle_operation(operation, args, settings):
             log.error(f"[CustomRules] Unrecognized operation: {operation}")
         return
 

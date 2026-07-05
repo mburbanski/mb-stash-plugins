@@ -97,6 +97,10 @@
     return runPluginOperation({ customRulesOperation: "read_rules_file" });
   }
 
+  async function saveRawRulesFile(contents) {
+    return runPluginOperation({ customRulesOperation: "write_rules_file", contents });
+  }
+
   async function fetchPluginSettings() {
     const data = await graphqlRequest(CONFIGURATION_QUERY);
     return (data.configuration.plugins && data.configuration.plugins[PLUGIN_ID]) || {};
@@ -142,6 +146,9 @@
     const [rawPath, setRawPath] = useState("");
     const [rawLoaded, setRawLoaded] = useState(false);
     const [rawError, setRawError] = useState(null);
+    const [rawSaving, setRawSaving] = useState(false);
+    const [rawSaved, setRawSaved] = useState(false);
+    const [rawSaveErrors, setRawSaveErrors] = useState(null);
 
     useEffect(() => {
       fetchPluginSettings()
@@ -174,6 +181,31 @@
         .catch((err) => setError(String(err)));
     }
 
+    function handleRawChange(event) {
+      setRawContents(event.target.value);
+      setRawSaved(false);
+      setRawSaveErrors(null);
+    }
+
+    function handleRawSave() {
+      setRawSaving(true);
+      setRawSaved(false);
+      setRawSaveErrors(null);
+      saveRawRulesFile(rawContents)
+        .then((result) => {
+          setRawSaving(false);
+          if (result.success) {
+            setRawSaved(true);
+          } else {
+            setRawSaveErrors(result.errors && result.errors.length ? result.errors : ["Unknown error"]);
+          }
+        })
+        .catch((err) => {
+          setRawSaving(false);
+          setRawSaveErrors([String(err)]);
+        });
+    }
+
     return el(
       "div",
       { className: "custom-rules-engine-config-page", style: { padding: "2rem", maxWidth: "640px" } },
@@ -204,22 +236,48 @@
       ),
       saved ? el("span", { style: { marginLeft: "0.75rem", color: "green" } }, "Saved") : null,
 
-      // --- Read-only preview of the actual rules file contents ---
-      // Step 1 of wiring the file itself into this page: prove the round
-      // trip through runPluginOperation works before adding editing/saving.
-      el("h3", { style: { marginTop: "2rem" } }, "Current rules file contents (read-only for now)"),
-      rawError ? el("p", { style: { color: "red" } }, "Error: " + rawError) : null,
+      // --- Raw rules file editor ---
+      // Plain-text editing for now; every save is validated server-side
+      // via schema.validate_rules_data() before anything is written to
+      // disk (see write_rules_file_raw() in entrypoint.py) -- an invalid
+      // rule blocks the whole save rather than being silently dropped.
+      el("h3", { style: { marginTop: "2rem" } }, "Rules file contents"),
+      rawError ? el("p", { style: { color: "red" } }, "Error loading file: " + rawError) : null,
       rawLoaded
         ? el(
             "div",
             null,
             el("p", { style: { fontFamily: "monospace", fontSize: "0.85rem" } }, rawPath),
             el("textarea", {
-              readOnly: true,
               value: rawContents,
+              onChange: handleRawChange,
+              disabled: rawSaving,
               rows: 16,
               style: { width: "100%", fontFamily: "monospace", padding: "0.5rem" },
-            })
+            }),
+            el(
+              "button",
+              {
+                onClick: handleRawSave,
+                disabled: rawSaving,
+                style: { marginTop: "1rem" },
+                className: "btn btn-primary",
+              },
+              rawSaving ? "Saving..." : "Save"
+            ),
+            rawSaved ? el("span", { style: { marginLeft: "0.75rem", color: "green" } }, "Saved") : null,
+            rawSaveErrors
+              ? el(
+                  "div",
+                  { style: { marginTop: "0.75rem", color: "red" } },
+                  el("p", null, "Not saved -- fix the following and try again:"),
+                  el(
+                    "ul",
+                    null,
+                    rawSaveErrors.map((msg, i) => el("li", { key: i }, msg))
+                  )
+                )
+              : null
           )
         : el("p", null, "Loading...")
     );

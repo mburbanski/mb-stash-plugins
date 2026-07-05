@@ -121,6 +121,42 @@ def read_rules_file_raw(path: str) -> str:
         return f.read()
 
 
+def write_rules_file_raw(path: str, contents: str) -> "tuple[bool, list[str]]":
+    """
+    Validate `contents` as a rules JSON document and, only if EVERY rule in
+    it is valid, write it verbatim to `path`.
+
+    Returns (success, errors). On success, errors is empty and the file has
+    been written exactly as submitted -- no reformatting, no re-serializing.
+    On failure, nothing is written, not even a partial file; errors
+    describes what's wrong so a UI can show it back to the person editing.
+
+    This is a deliberately different tradeoff than load_rules(), which
+    skips individual invalid rules and keeps running with the rest -- that
+    makes sense for runtime resilience against a rules file someone else
+    broke. Here, in an editor, silently discarding part of what someone
+    just typed because one rule had a typo would be a bad, surprising
+    outcome. Any invalid rule blocks the whole save.
+    """
+    try:
+        data = json.loads(contents)
+    except json.JSONDecodeError as e:
+        return False, [f"Invalid JSON: {e}"]
+
+    try:
+        rules, validation_errors = validate_rules_data(data)
+    except RulesFileError as e:
+        return False, [str(e)]
+
+    if validation_errors:
+        return False, [str(e) for e in validation_errors]
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(contents)
+
+    return True, []
+
+
 # ------------------------------------------------------------
 # Applying planned changes
 # ------------------------------------------------------------
