@@ -2,25 +2,29 @@
 Pure rule-evaluation engine.
 
 Nothing in this module reads stdin, calls the Stash API, or touches disk.
-Every function here is callable and testable with plain dicts, which is what
-makes a future dry-run mode (and unit tests) cheap: you can hand it a sample
-scene dict and a rules list and inspect exactly what it *would* do.
+Everything here operates on the validated dataclasses from schema.py
+(Rule/Condition/Action) rather than raw dicts -- by the time a Rule reaches
+this module, its shape is already guaranteed, so there's no defensive
+`.get()` scattered through the evaluator. Malformed input is caught once,
+at load time, in schema.py.
 
-Condition types and action types are dispatched through registries
-(CONDITION_HANDLERS / ACTION_HANDLERS) rather than if/elif chains, so adding
-a new condition or action type later means writing a handler function and
-registering it here -- not editing a growing branch of existing logic.
+Condition types and action types are still dispatched through registries
+(CONDITION_HANDLERS / ACTION_HANDLERS). The RuleError path here is now a
+defense-in-depth safety net (e.g. for Rule objects constructed directly in
+tests, bypassing schema validation) rather than the primary way unknown
+types get caught -- that happens in schema.py now.
 """
 
 import re
-from dataclasses import dataclass, field as dc_field
+from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from resolvers import get_field
+from schema import Rule, Condition, Action
 
 
 class RuleError(Exception):
-    """Raised for malformed rule definitions: bad regex, unknown types, etc."""
+    """Raised when a rule reaches the engine in a state schema validation should have caught."""
 
 
 @dataclass
@@ -46,24 +50,20 @@ def substitute(template: str, match: Optional[re.Match]) -> str:
 # ------------------------------------------------------------
 # Condition handlers
 # ------------------------------------------------------------
-def _cond_regex(entity: dict, cond: dict) -> Optional[re.Match]:
-    field_path = cond.get("field")
-    pattern = cond.get("pattern")
-    value = get_field(entity, field_path)
-
+def _cond_regex(entity: dict, cond: Condition) -> Optional[re.Match]:
+    value = get_field(entity, cond.field)
     if value is None:
         return None
 
-    try:
-        compiled = re.compile(pattern)
-    except re.error as e:
-        raise RuleError(f"invalid regex '{pattern}' for field '{field_path}': {e}")
+    # Pattern was already compiled and validated at load time (schema.py),
+    # so no re.compile / re.error handling needed here.
+    compiled = cond.compiled_pattern
 
     # List fields: first element that matches wins (mirrors original behavior).
     # NOTE: if a rule has multiple conditions targeting the same list field,
     # only the match from the LAST condition evaluated is kept for capture
-    # group substitution -- this is a known limitation carried over from the
-    # original implementation, not something this rewrite changes.
+    # group substitution -- a known limitation carried over from the
+    # original implementation, not addressed by this rewrite.
     if isinstance(value, list):
         for item in value:
             if isinstance(item, str):
@@ -78,32 +78,27 @@ def _cond_regex(entity: dict, cond: dict) -> Optional[re.Match]:
     return compiled.search(value)
 
 
-CONDITION_HANDLERS: dict[str, Callable[[dict, dict], Optional[re.Match]]] = {
+CONDITION_HANDLERS: dict[str, Callable[[dict, Condition], Optional[re.Match]]] = {
     "regex": _cond_regex,
 }
 
 
-def evaluate_conditions(entity: dict, rule: dict) -> Optional[re.Match]:
+def evaluate_conditions(entity: dict, rule: Rule) -> Optional[re.Match]:
     """
     Evaluate every condition in `rule` against `entity`.
 
     Returns the match object from the last condition evaluated (used for
     capture-group substitution in actions) if ALL conditions pass, or None
-    if the rule has no conditions or any condition fails.
-
-    Raises RuleError if a condition uses an unregistered type or a bad
-    pattern -- the caller decides whether to skip just this rule or abort.
+    if any condition fails. (schema.py guarantees every rule has at least
+    one condition, so an empty list here would indicate a Rule built
+    outside the normal validation path.)
     """
-    conditions = rule.get("conditions", [])
-    if not conditions:
-        return None
-
     last_match = None
-    for cond in conditions:
-        ctype = cond.get("type")
-        handler = CONDITION_HANDLERS.get(ctype)
+    for cond in rule.conditions:
+        handler = CONDITION_HANDLERS.get(cond.type)
         if handler is None:
-            raise RuleError(f"unsupported condition type: {ctype}")
+            # Should be unreachable for schema-validated rules.
+            raise RuleError(f"unsupported condition type: {cond.type}")
 
         result = handler(entity, cond)
         if not result:
@@ -116,41 +111,29 @@ def evaluate_conditions(entity: dict, rule: dict) -> Optional[re.Match]:
 # ------------------------------------------------------------
 # Action handlers
 # ------------------------------------------------------------
-def _action_set(entity: dict, action: dict, match: Optional[re.Match]) -> Optional[PlannedChange]:
-    field_path = action.get("field")
-    mode = action.get("mode", "always")
-    template = action.get("template", "")
-
-    if mode != "always":
-        raise RuleError(f"unsupported mode for 'set': {mode}")
-
-    new_value = substitute(template, match)
-    current_value = get_field(entity, field_path)
+def _action_set(entity: dict, action: Action, match: Optional[re.Match]) -> Optional[PlannedChange]:
+    new_value = substitute(action.template, match)
+    current_value = get_field(entity, action.field)
     if current_value == new_value:
         return None  # already correct, no-op
 
     return PlannedChange(
-        field=field_path,
+        field=action.field,
         new_value=new_value,
         action_type="set",
-        reason=f"setting {field_path} -> {new_value}",
+        reason=f"setting {action.field} -> {new_value}",
     )
 
 
-def _action_add(entity: dict, action: dict, match: Optional[re.Match]) -> Optional[PlannedChange]:
-    field_path = action.get("field")
-    mode = action.get("mode", "if_missing")
-    template = action.get("template", "")
-
-    if mode != "if_missing":
-        raise RuleError(f"unsupported mode for 'add': {mode}")
-
-    new_value = substitute(template, match)
-    existing = entity.get(field_path)
+def _action_add(entity: dict, action: Action, match: Optional[re.Match]) -> Optional[PlannedChange]:
+    new_value = substitute(action.template, match)
+    existing = entity.get(action.field)
     if existing is None:
         existing = []
     if not isinstance(existing, list):
-        raise RuleError(f"field '{field_path}' is not a list; cannot 'add'")
+        # Schema validation can't know the runtime type of a scene field,
+        # so this check still has to happen here rather than at load time.
+        raise RuleError(f"field '{action.field}' is not a list; cannot 'add'")
 
     # NOTE: substring-match dedup (not exact-match) carried over from the
     # original implementation -- flagged earlier as a correctness issue to
@@ -162,31 +145,31 @@ def _action_add(entity: dict, action: dict, match: Optional[re.Match]) -> Option
         return None
 
     return PlannedChange(
-        field=field_path,
+        field=action.field,
         new_value=existing + [new_value],
         action_type="add",
-        reason=f"adding to {field_path} -> {new_value}",
+        reason=f"adding to {action.field} -> {new_value}",
     )
 
 
-ACTION_HANDLERS: dict[str, Callable[[dict, dict, Optional[re.Match]], Optional[PlannedChange]]] = {
+ACTION_HANDLERS: dict[str, Callable[[dict, Action, Optional[re.Match]], Optional[PlannedChange]]] = {
     "set": _action_set,
     "add": _action_add,
 }
 
 
-def plan_actions(entity: dict, rule: dict, match: Optional[re.Match]) -> list[PlannedChange]:
+def plan_actions(entity: dict, rule: Rule, match: Optional[re.Match]) -> list:
     """
     Compute the PlannedChange list that applying `rule`'s actions to `entity`
     would produce, WITHOUT calling out to Stash. Safe to use for previews /
     dry-runs since it never mutates `entity` or calls any API.
     """
     changes = []
-    for action in rule.get("actions", []):
-        atype = action.get("type")
-        handler = ACTION_HANDLERS.get(atype)
+    for action in rule.actions:
+        handler = ACTION_HANDLERS.get(action.type)
         if handler is None:
-            raise RuleError(f"unsupported action type: {atype}")
+            # Should be unreachable for schema-validated rules.
+            raise RuleError(f"unsupported action type: {action.type}")
 
         change = handler(entity, action, match)
         if change is not None:
@@ -194,7 +177,7 @@ def plan_actions(entity: dict, rule: dict, match: Optional[re.Match]) -> list[Pl
     return changes
 
 
-def evaluate_rule(entity: dict, rule: dict) -> Optional[list[PlannedChange]]:
+def evaluate_rule(entity: dict, rule: Rule) -> Optional[list]:
     """
     Evaluate a single rule against `entity`.
     Returns a list of PlannedChange (possibly empty) if the rule's
@@ -208,22 +191,22 @@ def evaluate_rule(entity: dict, rule: dict) -> Optional[list[PlannedChange]]:
 
 def run_rules(
     entity: dict,
-    rules: list[dict],
+    rules: list,  # list[Rule]
     hook_type: Optional[str] = None,
-    on_error: Optional[Callable[[dict, RuleError], None]] = None,
-) -> list[tuple[dict, list[PlannedChange]]]:
+    on_error: Optional[Callable[[Rule, RuleError], None]] = None,
+) -> "list[tuple[Rule, list]]":
     """
     Evaluate all `rules` against `entity`, in file order.
 
     Returns a list of (rule, changes) tuples for rules whose conditions
-    matched. A malformed rule reports through `on_error(rule, error)` (if
-    given) and is skipped -- it does not abort evaluation of the remaining
-    rules.
+    matched. If a rule hits a runtime-only problem (e.g. a field turning out
+    not to be a list for an 'add' action), it reports through
+    `on_error(rule, error)` if given, and is skipped -- it does not abort
+    evaluation of the remaining rules.
     """
     results = []
     for rule in rules:
-        events = rule.get("events")
-        if events and hook_type not in events:
+        if rule.events and hook_type not in rule.events:
             continue
 
         try:
