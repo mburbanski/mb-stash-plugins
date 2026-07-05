@@ -1,6 +1,6 @@
 name: Custom Rules Engine
 description: Define rules that automatically update item metadata 
-version: 0.6.0
+version: 0.6.1
 
 exec:
   - python3
