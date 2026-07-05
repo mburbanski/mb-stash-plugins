@@ -5,6 +5,11 @@ This is where disk access, logging, and StashInterface calls live, so that
 engine.py and schema.py can stay pure and independently testable.
 CustomRulesEngine.py (the plugin's actual exec target) is a thin script that
 parses stdin and hands off to the functions here.
+
+Nothing in this module is Scene-specific: process_entity() and
+apply_changes() work against whatever EntityHooks config the incoming hook
+type resolves to (see hooks.py). That's the seam future entity types plug
+into without touching this file.
 """
 
 import json
@@ -13,13 +18,10 @@ import os
 import stashapi.log as log
 
 from engine import run_rules, RuleError, PlannedChange
+from hooks import EntityHooks
 from schema import validate_rules_data, RulesFileError, RuleValidationError, Rule
 
 PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# Scene fields that, if changed, warrant re-running rules on
-# Scene.Update.Post. Avoids reprocessing on unrelated field edits.
-RELEVANT_UPDATE_FIELDS = ("code", "files", "path", "urls")
 
 
 # ------------------------------------------------------------
@@ -37,7 +39,7 @@ def load_rules(path: str) -> "list[Rule]":
         wrong top-level shape) -> error, nothing loads.
       - Individual rule fails validation -> error for that rule only; the
         rest of the file still loads and runs.
-    A rule whose *conditions* legitimately don't match a given scene is not
+    A rule whose *conditions* legitimately don't match a given entity is not
     an error at all -- that's an ordinary outcome handled later in
     run_rules(), not here.
     """
@@ -79,17 +81,17 @@ def resolve_rules_file(settings: dict) -> str:
 # ------------------------------------------------------------
 # Applying planned changes
 # ------------------------------------------------------------
-def apply_changes(stash, entity_id, changes: "list[PlannedChange]") -> None:
-    """Apply a batch of PlannedChange objects to a scene via the Stash API."""
+def apply_changes(stash, hook_config: EntityHooks, entity_id, changes: "list[PlannedChange]") -> None:
+    """Apply a batch of PlannedChange objects to an entity via the Stash API."""
     if not changes:
         return
 
-    update = {"id": entity_id}
+    update = {}
     for change in changes:
         update[change.field] = change.new_value
-        log.info(f"[CustomRules] Scene {entity_id}: {change.reason}")
+        log.info(f"[CustomRules] {hook_config.entity_type} {entity_id}: {change.reason}")
 
-    stash.update_scene(update)
+    hook_config.apply(stash, entity_id, update)
 
 
 def _log_rule_error(rule: Rule, error: Exception) -> None:
@@ -97,25 +99,28 @@ def _log_rule_error(rule: Rule, error: Exception) -> None:
 
 
 # ------------------------------------------------------------
-# Scene processing
+# Entity processing (generic across entity types)
 # ------------------------------------------------------------
-def process_scene(stash, scene: dict, settings: dict, hook_type: str) -> None:
+def process_entity(stash, hook_config: EntityHooks, entity: dict, settings: dict, hook_type: str) -> None:
     rules_file = resolve_rules_file(settings)
     rules = load_rules(rules_file)
 
     if not rules:
-        log.debug(f"[CustomRules] Scene {scene['id']}: no valid rules loaded; skipping")
+        log.debug(
+            f"[CustomRules] {hook_config.entity_type} {entity['id']}: "
+            f"no valid rules loaded; skipping"
+        )
         return
 
-    results = run_rules(scene, rules, hook_type=hook_type, on_error=_log_rule_error)
+    results = run_rules(entity, rules, hook_type=hook_type, on_error=_log_rule_error)
 
     for rule, changes in results:
-        log.info(f"[CustomRules] Scene {scene['id']}: rule matched -> {rule.name}")
-        apply_changes(stash, scene["id"], changes)
+        log.info(f"[CustomRules] {hook_config.entity_type} {entity['id']}: rule matched -> {rule.name}")
+        apply_changes(stash, hook_config, entity["id"], changes)
 
 
-def should_process_update(changed_fields: dict) -> bool:
-    """Whether a Scene.Update.Post event touched a field rules might care about."""
+def should_process_update(hook_config: EntityHooks, changed_fields: dict) -> bool:
+    """Whether an update event touched a field this entity type's rules might care about."""
     if not changed_fields:
         return False
-    return any(f in changed_fields for f in RELEVANT_UPDATE_FIELDS)
+    return any(f in changed_fields for f in hook_config.relevant_update_fields)
