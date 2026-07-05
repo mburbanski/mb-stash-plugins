@@ -1,10 +1,14 @@
 name: Custom Rules Engine
 description: Define rules that automatically update item metadata 
-version: 0.6.1
+version: 0.7.0
 
 exec:
   - python3
   - "{pluginDir}/CustomRulesEngine.py"
+
+ui:
+  javascript:
+    - CustomRulesEngine.js
 
 hooks:
   - name: Apply custom rules on scene create/update
