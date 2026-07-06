@@ -23,7 +23,7 @@
 (function () {
   const PluginApi = window.PluginApi;
   const React = PluginApi.React;
-  const { useState, useEffect } = React;
+  const { useState, useEffect, useMemo } = React;
 
   const el = React.createElement;
 
@@ -134,6 +134,69 @@
   }
 
   // ------------------------------------------------------------
+  // Structured rule preview (read-only)
+  // ------------------------------------------------------------
+  // Renders one rule object (already-parsed JSON, not yet schema-validated)
+  // as a readable card. Deliberately tolerant of missing/malformed fields
+  // here -- this is a preview for a human still typing, not the validator;
+  // schema.py on the Python side remains the actual source of truth for
+  // whether a rule is valid, checked at Save time.
+  function renderConditionSummary(cond, index) {
+    if (!cond || typeof cond !== "object") {
+      return el("li", { key: index }, "(malformed condition)");
+    }
+    return el(
+      "li",
+      { key: index },
+      `${cond.type || "?"}: ${cond.field || "?"} ~ /${cond.pattern || "?"}/`
+    );
+  }
+
+  function renderActionSummary(action, index) {
+    if (!action || typeof action !== "object") {
+      return el("li", { key: index }, "(malformed action)");
+    }
+    const modeSuffix = action.mode ? ` (${action.mode})` : "";
+    return el(
+      "li",
+      { key: index },
+      `${action.type || "?"} ${action.field || "?"} = "${action.template || ""}"${modeSuffix}`
+    );
+  }
+
+  function renderRuleCard(rule, index) {
+    const name = (rule && rule.name) || `Rule #${index}`;
+    const conditions = (rule && Array.isArray(rule.conditions)) ? rule.conditions : [];
+    const actions = (rule && Array.isArray(rule.actions)) ? rule.actions : [];
+    const events = (rule && Array.isArray(rule.events)) ? rule.events : null;
+
+    return el(
+      "div",
+      {
+        key: index,
+        style: {
+          border: "1px solid #444",
+          borderRadius: "6px",
+          padding: "0.75rem 1rem",
+          marginTop: "0.75rem",
+        },
+      },
+      el("strong", null, name),
+      events
+        ? el("p", { style: { margin: "0.25rem 0", fontSize: "0.85rem", opacity: 0.75 } }, "Events: " + events.join(", "))
+        : el("p", { style: { margin: "0.25rem 0", fontSize: "0.85rem", opacity: 0.75 } }, "Events: (any)"),
+      el("p", { style: { margin: "0.5rem 0 0.25rem", fontWeight: 600 } }, "Conditions"),
+      conditions.length
+        ? el("ul", { style: { margin: 0 } }, conditions.map(renderConditionSummary))
+        : el("p", { style: { margin: 0, fontStyle: "italic", opacity: 0.75 } }, "(none -- this rule can never match)"),
+      el("p", { style: { margin: "0.5rem 0 0.25rem", fontWeight: 600 } }, "Actions"),
+      actions.length
+        ? el("ul", { style: { margin: 0 } }, actions.map(renderActionSummary))
+        : el("p", { style: { margin: 0, fontStyle: "italic", opacity: 0.75 } }, "(none -- this rule would do nothing)")
+    );
+  }
+
+  // ------------------------------------------------------------
   // Dedicated configuration page (registered as its own route)
   // ------------------------------------------------------------
   function RulesConfigPage() {
@@ -206,6 +269,22 @@
         });
     }
 
+    // Live client-side parse for the preview below -- NOT validation.
+    // A syntactically valid JSON document can still fail schema.py's
+    // rules at Save time (e.g. bad regex, unsupported mode); this only
+    // catches "isn't parseable JSON yet" / "doesn't have a rules array".
+    const preview = useMemo(() => {
+      try {
+        const data = JSON.parse(rawContents);
+        if (!data || !Array.isArray(data.rules)) {
+          return { error: "Parsed JSON, but no top-level 'rules' array was found." };
+        }
+        return { rules: data.rules };
+      } catch (err) {
+        return { error: String(err.message || err) };
+      }
+    }, [rawContents]);
+
     return el(
       "div",
       { className: "custom-rules-engine-config-page", style: { padding: "2rem", maxWidth: "640px" } },
@@ -235,6 +314,25 @@
         "Save"
       ),
       saved ? el("span", { style: { marginLeft: "0.75rem", color: "green" } }, "Saved") : null,
+
+      // --- Structured preview (read-only) ---
+      // Parses whatever's currently in the raw editor below and shows it
+      // as readable cards. This is a preview only -- schema.py on the
+      // Python side remains the actual validator, checked at Save time.
+      // Editing still happens in the raw JSON textarea below; this will
+      // become the real editing surface in a later step.
+      el("h3", { style: { marginTop: "2rem" } }, "Rules (preview)"),
+      rawLoaded
+        ? preview.error
+          ? el(
+              "p",
+              { style: { fontStyle: "italic", opacity: 0.75 } },
+              "Can't preview yet: " + preview.error
+            )
+          : preview.rules.length
+          ? el("div", null, preview.rules.map(renderRuleCard))
+          : el("p", { style: { fontStyle: "italic", opacity: 0.75 } }, "No rules defined yet.")
+        : el("p", null, "Loading..."),
 
       // --- Raw rules file editor ---
       // Plain-text editing for now; every save is validated server-side
