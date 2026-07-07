@@ -1,0 +1,131 @@
+/* Custom Rules Engine - config page styles.
+   Deliberately light-touch: relies on Stash's own dark theme for colors
+   wherever possible (inputs, backgrounds), and only adds layout/spacing/
+   alignment rules -- the things plain inline styles handled badly once
+   rows needed to line up consistently across a whole card. */
+
+.cre-rule-card {
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-top: 1rem;
+}
+
+/* Two-column split: identity (name/triggers) on the left, the actual
+   rule logic (conditions/actions) on the right -- this is the single
+   biggest fix for the "everything stacked full-width" clutter. */
+.cre-rule-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.cre-rule-name-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.cre-rule-name-input {
+  flex: 1;
+  padding: 0.5rem;
+  font-weight: 600;
+}
+
+.cre-section-label {
+  font-weight: 600;
+  margin: 0.75rem 0 0.35rem;
+}
+
+.cre-trigger-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.cre-trigger-checkbox {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.cre-hint {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  margin: 0.25rem 0;
+}
+
+/* Grid-aligned rows: every condition row shares the same column widths as
+   every other condition row, so the eye can scan straight down a column
+   instead of each row's inputs shifting width based on their content. */
+.cre-condition-row {
+  display: grid;
+  grid-template-columns: 100px 160px 1fr 32px;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.4rem;
+}
+
+/* Action rows follow the mockup's field order: type, mode, field, template. */
+.cre-action-row {
+  display: grid;
+  grid-template-columns: 90px 110px 140px 1fr 32px;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.4rem;
+}
+
+.cre-condition-row input,
+.cre-action-row input,
+.cre-condition-row select,
+.cre-action-row select {
+  width: 100%;
+  padding: 0.4rem;
+  box-sizing: border-box;
+}
+
+.cre-condition-row input[type="text"],
+.cre-action-row input[type="text"] {
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+/* Compact square icon button rather than a variable-width text button --
+   keeps every row's trailing column the same width regardless of label
+   length, which is what let rows misalign in the old layout. */
+.cre-remove-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: #c0392b;
+  color: white;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cre-remove-btn:hover {
+  background: #a93226;
+}
+
+.cre-remove-rule-btn {
+  padding: 0.4rem 0.75rem;
+  border: none;
+  border-radius: 4px;
+  background: #c0392b;
+  color: white;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cre-remove-rule-btn:hover {
+  background: #a93226;
+}
+
+.cre-add-btn {
+  margin-top: 0.5rem;
+}
