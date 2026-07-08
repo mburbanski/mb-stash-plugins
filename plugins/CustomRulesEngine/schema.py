@@ -10,10 +10,16 @@ ordinary, silent outcome) -- previously both collapsed into the same `None`.
 
 SCHEMA_VERSION describes the *rules file format* and is independent of the
 plugin's own version in CustomRulesEngine.yml. Bump it when the rule JSON
-shape changes in a backwards-incompatible way -- this is the field a future
-config UI would read to know whether it can safely parse/write a given
-rules file. Files without a schema_version are treated as version 1, so
-existing rules files continue to load unchanged.
+shape changes in a backwards-incompatible way. Files without a
+schema_version are treated as version 1.
+
+CONDITION SHAPE, v2: conditions are now {field, modifier, values}, where
+`modifier` is one of Stash's own CriterionModifier-style names (EQUALS,
+INCLUDES, MATCHES_REGEX, IS_NULL, BETWEEN, ...) rather than the old
+regex-only {type: "regex", field, pattern} shape. Existing rules files
+using the old shape are transparently upgraded at load time (see
+_normalize_legacy_condition) -- nobody needs to hand-edit an existing
+config.json for this change to take effect.
 """
 
 import re
@@ -22,11 +28,26 @@ from typing import Optional
 
 SCHEMA_VERSION = 1
 
-# Condition types and the raw fields they require. Extend this alongside
-# engine.CONDITION_HANDLERS when a new condition type is added.
-CONDITION_TYPE_FIELDS = {
-    "regex": {"field", "pattern"},
+# Modifier -> how many values it expects in "values". Mirrors Stash's own
+# CriterionModifier semantics (IS_NULL/NOT_NULL take none; BETWEEN/
+# NOT_BETWEEN take two; everything else takes exactly one). Extend this
+# alongside engine.MODIFIER_HANDLERS when a new modifier is added.
+MODIFIER_ARITY = {
+    "EQUALS": 1,
+    "NOT_EQUALS": 1,
+    "INCLUDES": 1,
+    "EXCLUDES": 1,
+    "MATCHES_REGEX": 1,
+    "NOT_MATCHES_REGEX": 1,
+    "GREATER_THAN": 1,
+    "LESS_THAN": 1,
+    "IS_NULL": 0,
+    "NOT_NULL": 0,
+    "BETWEEN": 2,
+    "NOT_BETWEEN": 2,
 }
+
+REGEX_MODIFIERS = ("MATCHES_REGEX", "NOT_MATCHES_REGEX")
 
 # Action types: required fields and the one mode the engine currently
 # supports for each. Extend alongside engine.ACTION_HANDLERS.
@@ -52,9 +73,10 @@ class RuleValidationError(Exception):
 
 @dataclass
 class Condition:
-    type: str
     field: str
-    pattern: str
+    modifier: str
+    values: list = field(default_factory=list)
+    # Only set (and only meaningful) for MATCHES_REGEX / NOT_MATCHES_REGEX.
     compiled_pattern: Optional[re.Pattern] = None
 
 
@@ -75,33 +97,67 @@ class Rule:
 
 
 # ------------------------------------------------------------
+# Backward compatibility: upgrade the old regex-only condition shape
+# ------------------------------------------------------------
+def _normalize_legacy_condition(raw: dict) -> dict:
+    """
+    Rules written before the modifier-based condition schema used
+    {"type": "regex", "field": ..., "pattern": ...}. Transparently upgrade
+    that shape to {"field": ..., "modifier": "MATCHES_REGEX",
+    "values": [pattern]} so existing rules files keep working completely
+    unchanged -- nobody should have to hand-edit a working config.json
+    because the plugin's internals changed shape.
+    """
+    if isinstance(raw, dict) and raw.get("type") == "regex" and "modifier" not in raw:
+        upgraded = dict(raw)
+        upgraded["modifier"] = "MATCHES_REGEX"
+        upgraded["values"] = [raw.get("pattern")]
+        upgraded.pop("type", None)
+        upgraded.pop("pattern", None)
+        return upgraded
+    return raw
+
+
+# ------------------------------------------------------------
 # Per-item validation
 # ------------------------------------------------------------
 def _validate_condition(raw: dict, rule_index: int, rule_name: str) -> Condition:
     if not isinstance(raw, dict):
         raise RuleValidationError(rule_index, rule_name, "condition must be an object")
 
-    ctype = raw.get("type")
-    if ctype not in CONDITION_TYPE_FIELDS:
+    raw = _normalize_legacy_condition(raw)
+
+    field_name = raw.get("field")
+    if not field_name:
+        raise RuleValidationError(rule_index, rule_name, "condition missing required field 'field'")
+
+    modifier = raw.get("modifier")
+    if modifier not in MODIFIER_ARITY:
         raise RuleValidationError(
             rule_index, rule_name,
-            f"unsupported condition type {ctype!r} (known: {sorted(CONDITION_TYPE_FIELDS)})",
+            f"unsupported modifier {modifier!r} (known: {sorted(MODIFIER_ARITY)})",
         )
 
-    missing = [f for f in CONDITION_TYPE_FIELDS[ctype] if not raw.get(f)]
-    if missing:
+    values = raw.get("values", [])
+    if not isinstance(values, list):
+        raise RuleValidationError(rule_index, rule_name, "'values' must be a list")
+
+    expected_arity = MODIFIER_ARITY[modifier]
+    if len(values) != expected_arity:
         raise RuleValidationError(
             rule_index, rule_name,
-            f"condition type '{ctype}' missing required field(s): {missing}",
+            f"modifier '{modifier}' expects {expected_arity} value(s) in 'values', got {len(values)}",
         )
 
-    pattern = raw["pattern"]
-    try:
-        compiled = re.compile(pattern)
-    except re.error as e:
-        raise RuleValidationError(rule_index, rule_name, f"invalid regex '{pattern}': {e}")
+    compiled_pattern = None
+    if modifier in REGEX_MODIFIERS:
+        pattern = values[0]
+        try:
+            compiled_pattern = re.compile(pattern)
+        except re.error as e:
+            raise RuleValidationError(rule_index, rule_name, f"invalid regex '{pattern}': {e}")
 
-    return Condition(type=ctype, field=raw["field"], pattern=pattern, compiled_pattern=compiled)
+    return Condition(field=field_name, modifier=modifier, values=values, compiled_pattern=compiled_pattern)
 
 
 def _validate_action(raw: dict, rule_index: int, rule_name: str) -> Action:

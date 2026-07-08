@@ -54,21 +54,88 @@ SCENE_HOOKS = EntityHooks(
     apply=lambda stash, entity_id, update: stash.update_scene({"id": entity_id, **update}),
 )
 
-# Register additional entity types here as they're supported, e.g.:
+# --------------------------------------------------------------------
+# NOTE ON METHOD NAMES BELOW: stashapi's public docs/examples only ever
+# show StashInterface.find_scene()/update_scene() directly. The
+# find_performer/update_performer/find_studio/update_studio/find_tag/
+# update_tag/find_gallery/update_gallery/find_image/update_image names
+# below follow that same naming convention and are very likely correct,
+# but -- unlike find_scene, which we've been running against successfully
+# this whole time -- these specific names haven't been confirmed against
+# a real stashapi installation. Since stashapi is already installed and
+# running on the machine this plugin runs on, the fastest way to confirm
+# is to check it directly there, e.g.:
 #
-# PERFORMER_HOOKS = EntityHooks(
-#     entity_type="Performer",
-#     create_events=("Performer.Create.Post",),
-#     update_events=("Performer.Update.Post",),
-#     relevant_update_fields=("name", "aliases", "urls"),
-#     fetch=lambda stash, entity_id: stash.find_performer(entity_id),
-#     apply=lambda stash, entity_id, update: stash.update_performer({"id": entity_id, **update}),
-# )
+#   python3 -c "from stashapi.stashapp import StashInterface as S; \
+#     print([m for m in dir(S) if 'performer' in m or 'studio' in m \
+#     or 'tag' in m or 'gallery' in m or 'image' in m])"
 #
-# ...and add it to HOOK_REGISTRY below. Remember to also add the new
-# triggeredBy events to CustomRulesEngine.yml, and Rule "events" lists that
-# should fire for the new entity type.
-HOOK_REGISTRY: tuple = (SCENE_HOOKS,)
+# run from an environment where stashapi is installed (or grep the
+# installed stashapp.py directly). If any name below doesn't match,
+# it's a one-line fix in the corresponding lambda.
+# --------------------------------------------------------------------
+
+PERFORMER_HOOKS = EntityHooks(
+    entity_type="Performer",
+    create_events=("Performer.Create.Post",),
+    update_events=("Performer.Update.Post",),
+    relevant_update_fields=("name", "aliases", "urls", "details"),
+    fetch=lambda stash, entity_id: stash.find_performer(entity_id),
+    apply=lambda stash, entity_id, update: stash.update_performer({"id": entity_id, **update}),
+)
+
+STUDIO_HOOKS = EntityHooks(
+    entity_type="Studio",
+    create_events=("Studio.Create.Post",),
+    update_events=("Studio.Update.Post",),
+    relevant_update_fields=("name", "aliases", "urls", "details"),
+    fetch=lambda stash, entity_id: stash.find_studio(entity_id),
+    apply=lambda stash, entity_id, update: stash.update_studio({"id": entity_id, **update}),
+)
+
+TAG_HOOKS = EntityHooks(
+    entity_type="Tag",
+    create_events=("Tag.Create.Post",),
+    # Tag.Merge.Post deliberately excluded for now -- "two tags became one"
+    # doesn't have the same "the object changed" semantics as Update, and
+    # deserves separate deliberate handling rather than being folded in
+    # here.
+    update_events=("Tag.Update.Post",),
+    relevant_update_fields=("name", "aliases", "description"),
+    fetch=lambda stash, entity_id: stash.find_tag(entity_id),
+    apply=lambda stash, entity_id, update: stash.update_tag({"id": entity_id, **update}),
+)
+
+GALLERY_HOOKS = EntityHooks(
+    entity_type="Gallery",
+    create_events=("Gallery.Create.Post",),
+    update_events=("Gallery.Update.Post",),
+    relevant_update_fields=("title", "code", "urls", "details", "photographer"),
+    fetch=lambda stash, entity_id: stash.find_gallery(entity_id),
+    apply=lambda stash, entity_id, update: stash.update_gallery({"id": entity_id, **update}),
+)
+
+IMAGE_HOOKS = EntityHooks(
+    entity_type="Image",
+    create_events=("Image.Create.Post",),
+    update_events=("Image.Update.Post",),
+    relevant_update_fields=("title", "code", "urls", "details"),
+    fetch=lambda stash, entity_id: stash.find_image(entity_id),
+    apply=lambda stash, entity_id, update: stash.update_image({"id": entity_id, **update}),
+)
+
+# Deliberately deferred (see design discussion): Movie/Group (naming is
+# mid-transition upstream), SceneMarker and GalleryChapter (sub-entities
+# of Scene/Gallery, sparse and ID-relationship-heavy field sets, unclear
+# value for this plugin's typical metadata-cleanup use case).
+HOOK_REGISTRY: tuple = (
+    SCENE_HOOKS,
+    PERFORMER_HOOKS,
+    STUDIO_HOOKS,
+    TAG_HOOKS,
+    GALLERY_HOOKS,
+    IMAGE_HOOKS,
+)
 
 
 def resolve_hook_config(hook_type: str) -> Optional[EntityHooks]:

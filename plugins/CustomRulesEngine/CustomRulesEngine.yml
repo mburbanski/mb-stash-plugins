@@ -1,6 +1,6 @@
 name: Custom Rules Engine
 description: Define rules that automatically update item metadata 
-version: 0.8.0
+version: 0.9.0
 
 exec:
   - python3
@@ -18,6 +18,31 @@ hooks:
     triggeredBy:
       - Scene.Create.Post
       - Scene.Update.Post
+  - name: Apply custom rules on performer create/update
+    description: Runs the rule engine when a performer is created or updated
+    triggeredBy:
+      - Performer.Create.Post
+      - Performer.Update.Post
+  - name: Apply custom rules on studio create/update
+    description: Runs the rule engine when a studio is created or updated
+    triggeredBy:
+      - Studio.Create.Post
+      - Studio.Update.Post
+  - name: Apply custom rules on tag create/update
+    description: Runs the rule engine when a tag is created or updated
+    triggeredBy:
+      - Tag.Create.Post
+      - Tag.Update.Post
+  - name: Apply custom rules on gallery create/update
+    description: Runs the rule engine when a gallery is created or updated
+    triggeredBy:
+      - Gallery.Create.Post
+      - Gallery.Update.Post
+  - name: Apply custom rules on image create/update
+    description: Runs the rule engine when an image is created or updated
+    triggeredBy:
+      - Image.Create.Post
+      - Image.Update.Post
 
 settings:
   rules_file:
